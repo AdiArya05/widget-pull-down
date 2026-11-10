@@ -52,6 +52,56 @@ final class FitnessPrototypeUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeAndStocksControls() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons["fitness-widget"].waitForExistence(timeout: 5))
+        let collapse = app.buttons["widget-collapse"]
+        let expandedHook = CGVector(dx: 0.94, dy: 0.961)
+
+        app.buttons["select-home"].tap()
+        let home = app.buttons["home-widget"]
+        XCTAssertTrue(home.waitForExistence(timeout: 3))
+        attachScreenshot("Home widget")
+        drag(in: app, from: CGVector(dx: 0.933, dy: 0.292), toY: 0.97, velocity: 620)
+
+        let lamp = app.buttons["home-lamp"]
+        XCTAssertTrue(lamp.waitForExistence(timeout: 3))
+        XCTAssertEqual(lamp.value as? String, "Off")
+        lamp.tap()
+        XCTAssertEqual(lamp.value as? String, "On")
+        attachScreenshot("Living Room lit")
+        app.buttons["home-leave"].tap()
+        XCTAssertEqual(lamp.value as? String, "Off")
+        app.buttons["home-arrive"].tap()
+        XCTAssertEqual(lamp.value as? String, "On")
+        drag(in: app, from: expandedHook, toY: 0.29, velocity: 620)
+        XCTAssertTrue(home.waitForExistence(timeout: 3))
+
+        app.buttons["select-stocks"].tap()
+        let stocks = app.buttons["stocks-widget"]
+        XCTAssertTrue(stocks.waitForExistence(timeout: 3))
+        attachScreenshot("Stocks widget")
+        drag(in: app, from: CGVector(dx: 0.46, dy: 0.292), toY: 0.97, velocity: 620)
+
+        let chart = app.descendants(matching: .any)["stocks-chart"]
+        XCTAssertTrue(chart.waitForExistence(timeout: 3))
+        let start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.20, dy: 0.60))
+        let end = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.60))
+        start.tap()
+        let firstPrice = chart.value as? String
+        XCTAssertTrue(firstPrice?.hasPrefix("$") == true)
+        start.press(forDuration: 0.1, thenDragTo: end)
+        let lastPrice = chart.value as? String
+        XCTAssertTrue(lastPrice?.hasPrefix("$") == true)
+        XCTAssertNotEqual(firstPrice, lastPrice)
+        attachScreenshot("Stocks scrubbed")
+        drag(in: app, from: expandedHook, toY: 0.29, velocity: 620)
+        XCTAssertTrue(stocks.waitForExistence(timeout: 3))
+        XCTAssertFalse(collapse.exists)
+    }
+
+    @MainActor
     private func drag(in app: XCUIApplication, from start: CGVector, toY: CGFloat, velocity: CGFloat) {
         app.coordinate(withNormalizedOffset: start).press(
             forDuration: 0.08,

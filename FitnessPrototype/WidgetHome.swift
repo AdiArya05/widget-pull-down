@@ -3,6 +3,10 @@ import SwiftUI
 enum WidgetKind: String, CaseIterable {
     case fitness = "Fitness"
     case weather = "Weather"
+    case home = "Home"
+    case stocks = "Stocks"
+
+    var order: Int { Self.allCases.firstIndex(of: self)! }
 
     var identifier: String { rawValue.lowercased() }
 }
@@ -67,7 +71,7 @@ struct WidgetHome: View {
                         Capsule()
                             .fill(.white.opacity(0.17))
                             .frame(width: segmentWidth, height: 30)
-                            .offset(x: selected == .weather ? segmentWidth : 0)
+                            .offset(x: CGFloat(selected.order) * segmentWidth)
                             .allowsHitTesting(false)
                     }
                     .padding(2)

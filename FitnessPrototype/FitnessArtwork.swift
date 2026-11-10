@@ -21,6 +21,19 @@ final class FitnessArtwork {
     private let weatherWidget = imageLayer("WeatherHome")
     private let weatherSummary = imageLayer("WeatherSummary")
     private let rain = WeatherRain()
+    private let homeWidget = imageLayer("HomeWidget")
+    private let homeRoom = imageLayer("HomeRoom")
+    private let homeLampTile = imageLayer("HomeWidget")
+    private let stocksWidget = imageLayer("StocksWidget")
+    private let stocksDetail = imageLayer("StocksDetail")
+    private let stockLine = CAShapeLayer()
+    private let stockPlotBackdrop = CALayer()
+    private let roomGlow = CAGradientLayer()
+    private let compactPrice = CATextLayer()
+    private let compactChange = CATextLayer()
+    private var lampIsOn = false
+
+    private var faces: [CALayer] { [widgetSnapshot, weatherWidget, homeWidget, stocksWidget] }
     private(set) var kind: WidgetKind = .fitness
     private let ring = MoveRing()
     private let handle = ResizeHandle()
@@ -40,16 +53,38 @@ final class FitnessArtwork {
         panel.cornerCurve = .continuous
         panel.addSublayer(canvas)
         for layer in [plate, widgetDetails, header, week, metrics, ring.layer, summary,
-                      weatherSummary, rain.layer, widgetSnapshot, weatherWidget] {
+                      weatherSummary, rain.layer, homeRoom, roomGlow, stocksDetail, stockPlotBackdrop,
+                      widgetSnapshot, weatherWidget, homeWidget, stocksWidget, compactPrice, compactChange, homeLampTile, stockLine] {
             canvas.addSublayer(layer)
         }
 
         plate.colors = [color(30, 30, 31).cgColor, color(13, 13, 13).cgColor]
-        for snapshot in [widgetSnapshot, weatherWidget] {
+        for snapshot in faces {
             snapshot.masksToBounds = true
             snapshot.cornerCurve = .continuous
         }
         setCrop(weatherWidget, to: CGRect(x: 48, y: 211, width: 843, height: 398))
+        crop(homeWidget, CGRect(x: 1118, y: 427, width: 772, height: 363), size: CGSize(width: 3008, height: 1692))
+        crop(homeLampTile, CGRect(x: 1514, y: 617, width: 170, height: 154), size: CGSize(width: 3008, height: 1692))
+        homeLampTile.cornerCurve = .continuous
+        homeLampTile.masksToBounds = true
+        crop(homeRoom, CGRect(x: 42, y: 38, width: 556, height: 1200), size: CGSize(width: 640, height: 1284))
+        crop(stocksWidget, CGRect(x: 63, y: 55, width: 318, height: 318), size: CGSize(width: 442, height: 428))
+        stockPlotBackdrop.backgroundColor = color(42, 42, 44).cgColor
+        stockLine.fillColor = nil
+        stockLine.strokeColor = color(92, 220, 96).cgColor
+        stockLine.lineCap = .round
+        stockLine.lineJoin = .round
+        roomGlow.type = .radial
+        roomGlow.startPoint = CGPoint(x: 0.28, y: 0.60)
+        roomGlow.endPoint = CGPoint(x: 0.92, y: 0.99)
+        roomGlow.colors = [UIColor.systemOrange.withAlphaComponent(0.29).cgColor, UIColor.clear.cgColor]
+        for label in [compactPrice, compactChange] {
+            label.backgroundColor = color(28, 28, 30).cgColor
+            label.contentsScale = 3
+        }
+        compactPrice.alignmentMode = .center
+        compactChange.alignmentMode = .right
         setKind(.fitness)
         setCrop(widgetSnapshot, to: Self.widget)
         setCrop(widgetDetails, to: CGRect(x: 445, y: 246, width: 336, height: 327))
@@ -68,13 +103,23 @@ final class FitnessArtwork {
         summary.frame = bounds
         weatherSummary.frame = bounds
         rain.layout(in: bounds)
-        weatherWidget.frame = widgetFrame
+        homeRoom.frame = bounds
+        roomGlow.frame = bounds
+        stocksDetail.frame = bounds
+        stockPlotBackdrop.frame = StocksChart.plotFrame(in: bounds)
+        stockLine.frame = bounds
         canvas.bounds = bounds
         for layer in [widgetSnapshot, widgetDetails, header, week, metrics] {
             placeCrop(layer)
         }
-        widgetSnapshot.cornerRadius = widgetRadius
-        weatherWidget.cornerRadius = widgetRadius
+        faces.forEach { $0.cornerRadius = widgetRadius }
+        let stockWidth = widgetFrame.height
+        compactPrice.string = NSAttributedString(string: "210.23", attributes: [
+            .font: UIFont.systemFont(ofSize: stockWidth * 0.22, weight: .light), .foregroundColor: UIColor.white
+        ])
+        compactChange.string = NSAttributedString(string: "+11.98", attributes: [
+            .font: UIFont.systemFont(ofSize: stockWidth * 0.068, weight: .medium), .foregroundColor: UIColor.white
+        ])
         CATransaction.commit()
     }
 
@@ -84,9 +129,15 @@ final class FitnessArtwork {
         CATransaction.setDisableActions(true)
         let weather = kind == .weather
         for layer in [widgetDetails, header, week, metrics, ring.layer, summary] {
-            layer.isHidden = weather
+            layer.isHidden = kind != .fitness
         }
         weatherSummary.isHidden = !weather
+        homeRoom.isHidden = kind != .home
+        roomGlow.isHidden = kind != .home
+        stocksDetail.isHidden = kind != .stocks
+        stockLine.isHidden = kind != .stocks
+        stockPlotBackdrop.isHidden = kind != .stocks
+        homeLampTile.isHidden = kind != .home
         panel.backgroundColor = weather ? color(66, 80, 97).cgColor : UIColor.black.cgColor
         CATransaction.commit()
     }
@@ -100,11 +151,14 @@ final class FitnessArtwork {
         return CGRect(x: left, y: top, width: right - left, height: bottom - top)
     }
 
-    func render(progress: CGFloat, recoil: CGFloat, weatherBlend: CGFloat, rainEnabled: Bool) {
+    func render(progress: CGFloat, recoil: CGFloat, blend: [CGFloat], rainEnabled: Bool) {
         guard !screen.isEmpty else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
+        let fullWidget = scale(Self.widget)
+        widgetFrame = fullWidget
+        widgetFrame.size.width = mix(fullWidget.width, fullWidget.height, blend[WidgetKind.stocks.order])
         let frame = panelFrame(at: progress)
         panel.frame = frame
         panel.cornerRadius = widgetRadius * (1 - ramp(progress, from: 0.75, to: 1))
@@ -113,26 +167,58 @@ final class FitnessArtwork {
         dim.opacity = Float(0.32 * progress)
         plate.frame = frame
         plate.opacity = Float(1 - ramp(progress, from: 0.06, to: 0.37))
+        let weatherBlend = blend[WidgetKind.weather.order]
         plate.colors = [
             color(mix(30, 103, weatherBlend), mix(30, 114, weatherBlend), mix(31, 129, weatherBlend)).cgColor,
             color(mix(13, 71, weatherBlend), mix(13, 84, weatherBlend), mix(13, 100, weatherBlend)).cgColor
         ]
-        // Keep the panel and handle in place while the two widget faces pass each other.
-        let drift = 16 * (1 - ramp(progress, from: 0, to: 0.24))
-        widgetSnapshot.position = CGPoint(x: widgetFrame.midX - drift * weatherBlend, y: widgetFrame.midY)
-        weatherWidget.position = CGPoint(x: widgetFrame.midX + drift * (1 - weatherBlend), y: widgetFrame.midY)
-        widgetSnapshot.opacity = Float((1 - ramp(weatherBlend, from: 0.55, to: 1))
-                                       * (1 - ramp(progress, from: 0, to: 0.11)))
-        weatherWidget.opacity = Float(weatherBlend * (1 - ramp(progress, from: 0.035, to: 0.25)))
+        let center = blend.enumerated().reduce(CGFloat.zero) { $0 + CGFloat($1.offset) * $1.element }
+        let previewEnds: [CGFloat] = [0.11, 0.25, 0.31, 0.24]
+        var accumulatedWeight: CGFloat = 0
+        for (index, face) in faces.enumerated() {
+            let offset = min(1, max(-1, CGFloat(index) - center)) * 16
+            var faceFrame = fullWidget
+            if index == WidgetKind.stocks.order { faceFrame.size.width = fullWidget.height }
+            face.frame = faceFrame.offsetBy(dx: offset * (1 - ramp(progress, from: 0, to: 0.24)), dy: 0)
+            accumulatedWeight += blend[index]
+            let opacity = accumulatedWeight > 0 ? blend[index] / accumulatedWeight : 0
+            face.opacity = Float(opacity * (1 - ramp(progress, from: 0.02, to: previewEnds[index])))
+        }
+        let stockFace = stocksWidget.frame
+        compactPrice.frame = CGRect(x: stockFace.minX + stockFace.width * 0.075,
+                                    y: stockFace.minY + stockFace.height * 0.69,
+                                    width: stockFace.width * 0.85, height: stockFace.height * 0.235)
+        compactChange.frame = CGRect(x: stockFace.minX + stockFace.width * 0.64,
+                                     y: stockFace.minY + stockFace.height * 0.088,
+                                     width: stockFace.width * 0.253, height: stockFace.height * 0.09)
+        compactPrice.opacity = stocksWidget.opacity
+        compactChange.opacity = stocksWidget.opacity
 
         let rainIntensity = rainEnabled && kind == .weather ? ramp(progress, from: 0.18, to: 0.66) : 0
         rain.update(intensity: rainIntensity)
 
-        if kind == .weather {
+        switch kind {
+        case .weather:
             let reveal = ramp(progress, from: 0.12, to: 0.56)
             weatherSummary.opacity = Float(reveal)
             weatherSummary.setAffineTransform(CGAffineTransform(translationX: 0, y: 10 * (1 - reveal)))
-        } else {
+        case .home:
+            homeRoom.opacity = Float(ramp(progress, from: 0.16, to: 0.66))
+            roomGlow.opacity = lampIsOn ? homeRoom.opacity : 0
+            let tileStart = CGRect(x: widgetFrame.minX + widgetFrame.width * 0.51,
+                                   y: widgetFrame.minY + widgetFrame.height * 0.52,
+                                   width: widgetFrame.width * 0.22, height: widgetFrame.height * 0.424)
+            let amount = ramp(progress, from: 0.11, to: 0.78)
+            homeLampTile.frame = mix(tileStart, RoomControls.lampFrame(in: screen), amount)
+            homeLampTile.cornerRadius = homeLampTile.frame.width * 0.15
+            homeLampTile.opacity = Float(ramp(progress, from: 0.12, to: 0.27)
+                                         * (1 - ramp(progress, from: 0.62, to: 0.87)))
+        case .stocks:
+            stocksDetail.opacity = Float(ramp(progress, from: 0.19, to: 0.78))
+            stockPlotBackdrop.opacity = Float(ramp(progress, from: 0.13, to: 0.27)
+                                               * (1 - ramp(progress, from: 0.76, to: 0.91)))
+            renderStockLine(progress: progress)
+        case .fitness:
             widgetDetails.opacity = Float(1 - ramp(progress, from: 0.08, to: 0.31))
             header.opacity = Float(ramp(progress, from: 0.21, to: 0.60))
             week.opacity = Float(ramp(progress, from: 0.65, to: 0.82))
@@ -152,6 +238,39 @@ final class FitnessArtwork {
         canvas.setAffineTransform(CGAffineTransform(scaleX: 1, y: 1 + recoil))
 
         CATransaction.commit()
+    }
+
+    func setLamp(_ on: Bool) {
+        lampIsOn = on
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.28)
+        roomGlow.opacity = on ? homeRoom.opacity : 0
+        CATransaction.commit()
+    }
+
+    private func renderStockLine(progress: CGFloat) {
+        let amount = ramp(progress, from: 0.08, to: 0.76)
+        let start = CGRect(x: widgetFrame.minX + widgetFrame.width * 0.093,
+                           y: widgetFrame.minY + widgetFrame.height * 0.37,
+                           width: widgetFrame.width * 0.80, height: widgetFrame.height * 0.20)
+        let end = StocksChart.plotFrame(in: screen)
+        let plot = mix(start, end, amount)
+        let path = UIBezierPath()
+        for index in StocksChart.compact.indices {
+            let x = CGFloat(index) / CGFloat(StocksChart.compact.count - 1)
+            let value = mix(StocksChart.compact[index], StocksChart.series[index], amount)
+            let point = CGPoint(x: plot.minX + plot.width * x, y: plot.maxY - plot.height * value)
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        stockLine.path = path.cgPath
+        stockLine.lineWidth = mix(1.6, 2, amount)
+        stockLine.opacity = Float(ramp(progress, from: 0.09, to: 0.31)
+                                  * (1 - ramp(progress, from: 0.76, to: 0.91)))
+    }
+
+    private func crop(_ layer: CALayer, _ rect: CGRect, size: CGSize) {
+        layer.contentsRect = CGRect(x: rect.minX / size.width, y: rect.minY / size.height,
+                                    width: rect.width / size.width, height: rect.height / size.height)
     }
 
     func handleHitFrame(at progress: CGFloat) -> CGRect {
