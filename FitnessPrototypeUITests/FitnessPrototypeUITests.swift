@@ -7,13 +7,11 @@ final class FitnessPrototypeUITests: XCTestCase {
         app.launch()
 
         let fitness = app.buttons["fitness-widget"]
-        let weather = app.buttons["weather-widget"]
         let collapse = app.buttons["widget-collapse"]
         XCTAssertTrue(fitness.waitForExistence(timeout: 5))
         attachScreenshot("Fitness widget")
 
         let right = CGVector(dx: 0.933, dy: 0.292)
-        let left = CGVector(dx: 0.10, dy: 0.281)
         let center = CGVector(dx: 0.50, dy: 0.281)
         let expandedHook = CGVector(dx: 0.94, dy: 0.961)
 
@@ -37,46 +35,17 @@ final class FitnessPrototypeUITests: XCTestCase {
         XCTAssertTrue(fitness.waitForExistence(timeout: 3))
         XCTAssertFalse(collapse.exists)
 
-        app.buttons["select-weather"].tap()
-        XCTAssertTrue(weather.waitForExistence(timeout: 3))
-        attachScreenshot("Weather widget")
-
-        drag(in: app, from: left, toY: 0.97, velocity: 620)
-        XCTAssertTrue(collapse.waitForExistence(timeout: 3))
-        XCTAssertFalse(weather.exists)
-        attachScreenshot("Weather expanded")
-
-        drag(in: app, from: expandedHook, toY: 0.29, velocity: 620)
-        XCTAssertTrue(weather.waitForExistence(timeout: 3))
-        XCTAssertFalse(collapse.exists)
+        XCTAssertFalse(app.buttons["select-weather"].exists)
+        XCTAssertFalse(app.buttons["select-home"].exists)
     }
 
     @MainActor
-    func testHomeAndStocksControls() {
+    func testStocksChartAndReturn() {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.buttons["fitness-widget"].waitForExistence(timeout: 5))
         let collapse = app.buttons["widget-collapse"]
         let expandedHook = CGVector(dx: 0.94, dy: 0.961)
-
-        app.buttons["select-home"].tap()
-        let home = app.buttons["home-widget"]
-        XCTAssertTrue(home.waitForExistence(timeout: 3))
-        attachScreenshot("Home widget")
-        drag(in: app, from: CGVector(dx: 0.933, dy: 0.292), toY: 0.97, velocity: 620)
-
-        let lamp = app.buttons["home-lamp"]
-        XCTAssertTrue(lamp.waitForExistence(timeout: 3))
-        XCTAssertEqual(lamp.value as? String, "Off")
-        lamp.tap()
-        XCTAssertEqual(lamp.value as? String, "On")
-        attachScreenshot("Living Room lit")
-        app.buttons["home-leave"].tap()
-        XCTAssertEqual(lamp.value as? String, "Off")
-        app.buttons["home-arrive"].tap()
-        XCTAssertEqual(lamp.value as? String, "On")
-        drag(in: app, from: expandedHook, toY: 0.29, velocity: 620)
-        XCTAssertTrue(home.waitForExistence(timeout: 3))
 
         app.buttons["select-stocks"].tap()
         let stocks = app.buttons["stocks-widget"]
@@ -99,6 +68,8 @@ final class FitnessPrototypeUITests: XCTestCase {
         drag(in: app, from: expandedHook, toY: 0.29, velocity: 620)
         XCTAssertTrue(stocks.waitForExistence(timeout: 3))
         XCTAssertFalse(collapse.exists)
+        app.buttons["select-fitness"].tap()
+        XCTAssertTrue(app.buttons["fitness-widget"].waitForExistence(timeout: 3))
     }
 
     @MainActor

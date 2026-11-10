@@ -18,11 +18,9 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
     private var dragDistance: CGFloat = 1
     private var displayLink: CADisplayLink?
     private var spring: SettleSpring?
-    private var blend: [CGFloat] = [1, 0, 0, 0]
-    private let roomControls = RoomControls()
+    private var stockBlend: CGFloat = 0
     private let stocksChart = StocksChart()
     private var widgetSwitch: WidgetSwitch?
-    private var isSceneActive = false
 
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
@@ -52,23 +50,14 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         collapse.accessibilityHint = "Swipe up from the bottom-right hook to return to the widget."
         collapse.accessibilityIdentifier = "widget-collapse"
         collapse.addAction(UIAction { [weak self] _ in self?.settle(open: false, velocity: 0) }, for: .touchUpInside)
-        view.addSubview(roomControls)
         view.addSubview(stocksChart)
         view.addSubview(collapse)
-        roomControls.lampChanged = { [weak self] on in self?.artwork.setLamp(on) }
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(drag(_:)))
         pan.maximumNumberOfTouches = 1
         pan.delegate = self
         view.addGestureRecognizer(pan)
         updateControls()
-        NotificationCenter.default.addObserver(self, selector: #selector(render),
-                                               name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
-    }
-
-    func setSceneActive(_ active: Bool) {
-        isSceneActive = active
-        if isViewLoaded { render() }
     }
 
     override func viewDidLayoutSubviews() {
@@ -76,7 +65,6 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         artwork.layout(in: view.bounds)
         widgetElement?.accessibilityFrameInContainerSpace = artwork.widgetFrame
         back.frame = artwork.backFrame
-        roomControls.frame = view.bounds
         stocksChart.frame = StocksChart.plotFrame(in: view.bounds)
         render()
     }
@@ -162,7 +150,7 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         if let switchAnimation = widgetSwitch {
             let fraction = unit(CGFloat((timestamp - switchAnimation.time) / WidgetSwitch.duration))
             let amount = ramp(fraction, from: 0, to: 1)
-            blend = zip(switchAnimation.start, switchAnimation.target).map { mix($0, $1, amount) }
+            stockBlend = mix(switchAnimation.start, switchAnimation.target, amount)
             if fraction == 1 { widgetSwitch = nil }
         }
 
@@ -192,16 +180,15 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         displayLink = nil
     }
 
-    @objc private func render() {
-        artwork.render(progress: progress, recoil: recoil, blend: blend,
-                       rainEnabled: isSceneActive && !UIAccessibility.isReduceMotionEnabled)
+    private func render() {
+        artwork.render(progress: progress, recoil: recoil, stockBlend: stockBlend)
         collapse.frame = artwork.handleHitFrame(at: progress)
         widgetElement?.accessibilityFrameInContainerSpace = artwork.widgetFrame
         let settledOpen = isOpen && progress > 0.998
-        roomControls.isHidden = !settledOpen || artwork.kind != .home
         stocksChart.isHidden = !settledOpen || artwork.kind != .stocks
         back.frame = artwork.kind == .stocks
-            ? CGRect(x: view.bounds.width * 0.035, y: view.bounds.height * 0.155, width: 48, height: 48)
+            ? CGRect(x: view.bounds.width * 0.032, y: view.bounds.height * 0.143,
+                     width: view.bounds.width * 0.126, height: view.bounds.height * 0.060)
             : artwork.backFrame
     }
 
@@ -209,13 +196,13 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         guard !isOpen, progress == 0 else { return false }
         guard artwork.kind != kind else { return true }
         artwork.setKind(kind)
-        let target: [CGFloat] = WidgetKind.allCases.map { $0 == kind ? 1 : 0 }
+        let target: CGFloat = kind == .stocks ? 1 : 0
         if UIAccessibility.isReduceMotionEnabled {
             widgetSwitch = nil
-            blend = target
+            stockBlend = target
             stopDisplayLinkIfIdle()
         } else {
-            widgetSwitch = WidgetSwitch(start: blend, target: target, time: CACurrentMediaTime())
+            widgetSwitch = WidgetSwitch(start: stockBlend, target: target, time: CACurrentMediaTime())
             startDisplayLink()
         }
         render()
@@ -224,17 +211,13 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
     }
 
     private func updateControls() {
-        back.isHidden = !isOpen || (artwork.kind != .fitness && artwork.kind != .stocks)
+        back.isHidden = !isOpen
+        back.accessibilityIdentifier = artwork.kind == .stocks ? "stocks-close" : "fitness-back"
         collapse.isHidden = !isOpen
         home.view.isUserInteractionEnabled = !isOpen
 
         if isOpen {
-            switch artwork.kind {
-            case .home: view.accessibilityElements = [roomControls, collapse]
-            case .stocks: view.accessibilityElements = [back, stocksChart, collapse]
-            case .fitness: view.accessibilityElements = [back, collapse]
-            case .weather: view.accessibilityElements = [collapse]
-            }
+            view.accessibilityElements = artwork.kind == .stocks ? [back, stocksChart, collapse] : [back, collapse]
         } else if let widgetElement {
             let kind = artwork.kind
             widgetElement.accessibilityLabel = "\(kind.rawValue) widget"
@@ -248,8 +231,8 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
 struct WidgetSwitch {
     static let duration: TimeInterval = 0.44
 
-    let start: [CGFloat]
-    let target: [CGFloat]
+    let start: CGFloat
+    let target: CGFloat
     let time: CFTimeInterval
 }
 

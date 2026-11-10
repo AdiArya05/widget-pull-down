@@ -16,14 +16,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 final class FitnessSceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
-    func sceneDidBecomeActive(_ scene: UIScene) {
-        (window?.rootViewController as? FitnessViewController)?.setSceneActive(true)
-    }
-
-    func sceneWillResignActive(_ scene: UIScene) {
-        (window?.rootViewController as? FitnessViewController)?.setSceneActive(false)
-    }
-
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)

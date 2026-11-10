@@ -2,11 +2,9 @@ import SwiftUI
 
 enum WidgetKind: String, CaseIterable {
     case fitness = "Fitness"
-    case weather = "Weather"
-    case home = "Home"
     case stocks = "Stocks"
 
-    var order: Int { Self.allCases.firstIndex(of: self)! }
+    var order: Int { self == .stocks ? 1 : 0 }
 
     var identifier: String { rawValue.lowercased() }
 }
