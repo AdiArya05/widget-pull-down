@@ -20,6 +20,7 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
     private var spring: SettleSpring?
     private var weatherBlend: CGFloat = 0
     private var widgetSwitch: WidgetSwitch?
+    private var isSceneActive = false
 
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
@@ -56,6 +57,13 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         pan.delegate = self
         view.addGestureRecognizer(pan)
         updateControls()
+        NotificationCenter.default.addObserver(self, selector: #selector(render),
+                                               name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
+    }
+
+    func setSceneActive(_ active: Bool) {
+        isSceneActive = active
+        if isViewLoaded { render() }
     }
 
     override func viewDidLayoutSubviews() {
@@ -175,8 +183,9 @@ final class FitnessViewController: UIViewController, UIGestureRecognizerDelegate
         displayLink = nil
     }
 
-    private func render() {
-        artwork.render(progress: progress, recoil: recoil, weatherBlend: weatherBlend)
+    @objc private func render() {
+        artwork.render(progress: progress, recoil: recoil, weatherBlend: weatherBlend,
+                       rainEnabled: isSceneActive && !UIAccessibility.isReduceMotionEnabled)
         collapse.frame = artwork.handleHitFrame(at: progress)
     }
 

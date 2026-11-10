@@ -20,6 +20,7 @@ final class FitnessArtwork {
     private let summary = imageLayer("FitnessSummary")
     private let weatherWidget = imageLayer("WeatherHome")
     private let weatherSummary = imageLayer("WeatherSummary")
+    private let rain = WeatherRain()
     private(set) var kind: WidgetKind = .fitness
     private let ring = MoveRing()
     private let handle = ResizeHandle()
@@ -39,7 +40,7 @@ final class FitnessArtwork {
         panel.cornerCurve = .continuous
         panel.addSublayer(canvas)
         for layer in [plate, widgetDetails, header, week, metrics, ring.layer, summary,
-                      weatherSummary, widgetSnapshot, weatherWidget] {
+                      weatherSummary, rain.layer, widgetSnapshot, weatherWidget] {
             canvas.addSublayer(layer)
         }
 
@@ -66,6 +67,7 @@ final class FitnessArtwork {
         dim.frame = bounds
         summary.frame = bounds
         weatherSummary.frame = bounds
+        rain.layout(in: bounds)
         weatherWidget.frame = widgetFrame
         canvas.bounds = bounds
         for layer in [widgetSnapshot, widgetDetails, header, week, metrics] {
@@ -98,7 +100,7 @@ final class FitnessArtwork {
         return CGRect(x: left, y: top, width: right - left, height: bottom - top)
     }
 
-    func render(progress: CGFloat, recoil: CGFloat, weatherBlend: CGFloat) {
+    func render(progress: CGFloat, recoil: CGFloat, weatherBlend: CGFloat, rainEnabled: Bool) {
         guard !screen.isEmpty else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -122,6 +124,9 @@ final class FitnessArtwork {
         widgetSnapshot.opacity = Float((1 - ramp(weatherBlend, from: 0.55, to: 1))
                                        * (1 - ramp(progress, from: 0, to: 0.11)))
         weatherWidget.opacity = Float(weatherBlend * (1 - ramp(progress, from: 0.035, to: 0.25)))
+
+        let rainIntensity = rainEnabled && kind == .weather ? ramp(progress, from: 0.18, to: 0.66) : 0
+        rain.update(intensity: rainIntensity)
 
         if kind == .weather {
             let reveal = ramp(progress, from: 0.12, to: 0.56)
